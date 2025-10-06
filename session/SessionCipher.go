@@ -256,15 +256,18 @@ func (d *Cipher) DecryptWithRecord(ctx context.Context, sessionRecord *record.Se
 	// through all previous states.
 
 	// safe copy of the error
-	initialErr := err
 	if errors.Is(err, signalerror.ErrOldCounter) {
 		return nil, nil, err
 	} else if err != nil {
 		logger.Warning(err)
+		var errs []error
+		errs = append(errs, err)
 		for i, state := range previousStates {
 			// Try decrypting the message with previous states
 			plaintext, messageKeys, err = d.DecryptWithState(ctx, state, ciphertext)
 			if err != nil {
+				logger.Warning(err)
+				errs = append(errs, err)
 				continue // this continues despite the error, to see if we can find something that works
 			}
 
@@ -275,7 +278,7 @@ func (d *Cipher) DecryptWithRecord(ctx context.Context, sessionRecord *record.Se
 			return plaintext, messageKeys, nil
 		}
 
-		return nil, nil, initialErr // return the error with the current state as that makes more sense
+		return nil, nil, errors.Join(errs...) // return a combined error with all the different errors
 	}
 
 	// If decryption was successful, set the session state and return the plain text.
